@@ -9,61 +9,82 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useLockBodyScroll, useWindowSize } from "@uidotdev/usehooks";
+import IconEdit from "@/assets/IconEdit";
+import { useGetDataVoucherSetting } from "@/store/server/query";
+import { useEditVoucherSetting } from "@/store/server/mutation";
+import IconOpen from "@/assets/IconOpen";
+import IconClose from "@/assets/IconClose";
+import CustomDrawer from "@/components/custom-drawer";
+import IconDelete from "@/assets/IconDelete";
+import Link from "next/link";
 
 const formschema = z.object({
   shopName: z.string().optional(),
   shopAddress: z.string().optional(),
   phoneNumber: z.string().optional(),
-  isShowQR: z.boolean(),
+  isShowQR: z.boolean().optional(),
   footerNote: z.string().optional(),
   message: z.string().optional(),
 });
 
 const Index = () => {
   const router = useRouter();
+
+  // getData
+  const { data } = useGetDataVoucherSetting({ id: 278, branch: 476 });
+
   const form = useForm<z.infer<typeof formschema>>({
     resolver: zodResolver(formschema),
     defaultValues: {
       shopName: "",
       shopAddress: "",
       phoneNumber: "",
-      isShowQR: true,
       message: "",
+      isShowQR: data?.isShowQR || false,
     },
   });
 
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const buttonRef = useRef<HTMLDivElement>(null);
-  const formRef = useRef<HTMLFormElement>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const size = useWindowSize();
+  const [fileData, setFileData] = useState<{
+    imageContent: string;
+    extension: string;
+  }>();
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  // useLockBodyScroll();
+  const [qr, setQr] = useState(data?.isShowQR);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (data) {
+      form.reset({
+        shopName: data?.shopName,
+        shopAddress: data?.shopAddress,
+        phoneNumber: data?.phoneNumber,
+        isShowQR: data?.isShowQR,
+        message: data?.footerNote,
+      });
+    }
+  }, [data]);
 
-  // useEffect(() => {
-  //   const handleResize = () => {
-  //     // if (editOpen) {
-  //     const wind = window.visualViewport?.height || window.innerHeight;
+  useEffect(() => {
+    if (form.getValues().isShowQR) {
+      setQr(form.getValues().isShowQR);
+    }
+  }, [form.getValues().isShowQR]);
 
-  //     const bottomOffset = Math.ceil(window.innerHeight - wind);
-
-  //     setKeyboardHeight(bottomOffset);
-  //     // }
-  //     console.log(window.visualViewport);
-  //   };
-
-  //   window.addEventListener("resize", handleResize);
-
-  //   return () => {
-  //     window.removeEventListener("resize", handleResize);
-  //   };
-  // }, [editOpen]);
+  console.log(qr);
 
   useEffect(() => {
     const handleResize = () => {
       const wind = window.visualViewport?.height;
       if (!wind) return;
+      if (wind > 700) {
+        setEditOpen(false);
+      } else {
+        setEditOpen(true);
+      }
+
       const bottomOffset = Math.ceil(window.innerHeight - wind);
       setKeyboardHeight(bottomOffset);
     };
@@ -77,17 +98,11 @@ const Index = () => {
 
   useEffect(() => {
     const handleFocus = () => {
-      const wind = window.visualViewport?.height;
-      if (!wind) return;
-      setEditOpen(true);
-      if (wind >= 700) {
-        setEditOpen(false);
-      }
       setEditOpen(true);
     };
 
     const handleBlur = () => {
-      setEditOpen(false);
+      // setEditOpen(false);
       // Scroll to top when keyboard closes
       window.scrollTo({ top: 0, behavior: "smooth" });
     };
@@ -121,121 +136,190 @@ const Index = () => {
     };
   }, [editOpen]);
 
-  const handleBackClick = () => {
-    setEditOpen(false);
-    router.push("/");
-  };
+  const editVoucher = useEditVoucherSetting();
+
+  useEffect(() => {
+    const handleFileChange = () => {
+      if (selectedImage) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === "string") {
+            const base64String = reader.result.split(",")[1];
+            const extension = selectedImage.name.split(".").pop();
+            setFileData({
+              imageContent: base64String,
+              extension: extension || "",
+            });
+          }
+        };
+        reader.readAsDataURL(selectedImage);
+      }
+    };
+    handleFileChange();
+  }, [selectedImage]);
 
   return (
     <div
-      ref={buttonRef}
       className={`bg-gray-100 px-5 pb-3 ${
         editOpen && `  mb-5  overflow-y-scroll`
       }`}
     >
-      <div className="gap-2 py-2 flex items-center">
-        <Button onClick={handleBackClick} variant={"link"} className="m-0 p-0">
-          <IconBack />
-        </Button>
-        <h5 className="font-semibold">Voucher ပြင်ဆင်မည်</h5>
+      <div className=" py-2 flex items-center justify-between">
+        <div className="gap-2 py-2 flex items-center">
+          <Button variant={"link"} className="m-0 p-0">
+            <IconBack />
+          </Button>
+          <h5 className="font-semibold text-sm">Voucher ပြင်ဆင်မည်</h5>
+        </div>
+        <Link href={`voucher/preview`} className=" text-[12px]">
+          အစမ်းကြည့်ရှုမည်
+        </Link>
       </div>
 
       <Form {...form}>
         <form
+          onSubmit={form.handleSubmit((value) =>
+            editVoucher.mutate(
+              {
+                id: data?.id,
+                shopId: data?.shopId,
+                branchId: data?.branchId,
+                logoId: 0,
+                logo: {
+                  imageContent: fileData?.imageContent,
+                  extension: fileData?.extension,
+                },
+                shopName: value.shopName,
+                shopAddress: value.shopAddress,
+                phoneNumber: value.phoneNumber,
+                isShowQR: qr,
+                footerNote: value.message,
+              },
+              {
+                onSuccess: () => setEditOpen(false),
+              }
+            )
+          )}
+          name="form"
+          id="form"
           // style={{
           //   height: editOpen ? keyboardHeight + 10 : "auto",
           // }}
           className={`${
-            editOpen && "  h-[500px] overflow-y-auto bg-white rounded-2xl "
-          }`}
-          ref={formRef}
+            editOpen &&
+            keyboardHeight !== 0 &&
+            "  h-[400px] overflow-y-auto bg-white rounded-2xl "
+          }  `}
         >
           <div
             className={`${
               editOpen && ""
             } py-4 pb-8 mb-5 bg-white overflow-y-auto rounded-3xl`}
           >
-            <div className="flex justify-center">
-              <input
-                onChange={(e) => setSelectedImage(e.target?.files?.[0] || null)}
-                type="file"
-                hidden
-                id="file"
-              />
-              <label
-                className="w-[80px] h-[80px] bg-gray-100 rounded-xl flex items-center justify-center mt-4"
-                htmlFor="file"
-              >
+            <div className="flex items-center gap-3 justify-center">
+              <div>
+                <input
+                  ref={fileRef}
+                  onChange={(e) =>
+                    setSelectedImage(e.target?.files?.[0] || null)
+                  }
+                  type="file"
+                  hidden
+                  id="file"
+                />
+
                 {selectedImage ? (
                   <img
+                    onClick={() => setOpen(true)}
                     src={URL.createObjectURL(selectedImage)}
                     className="w-[80px] h-[80px] object-cover rounded-xl"
                     alt=""
                   />
                 ) : (
-                  <>ca</>
+                  <label
+                    className="w-[80px] h-[80px] bg-gray-100 rounded-xl flex items-center justify-center mt-4"
+                    htmlFor="file"
+                  >
+                    <>ca</>
+                  </label>
                 )}
+              </div>
+              <label htmlFor="file" className=" block w-5 ">
+                <IconEdit />
               </label>
             </div>
 
-            {/* main section */}
-            <FormField
-              name="shopName"
-              control={form.control}
-              render={({ field }) => (
-                <div className="relative flex mt-2 items-center justify-center">
-                  <div className="flex items-center gap-5">
-                    <Input
-                      {...field}
-                      className="ml-3 w-[180px] text-base h-12"
-                      onFocus={() => setEditOpen(true)}
-                      onBlur={() => setEditOpen(false)}
-                    />
-                    <div onClick={() => setEditOpen(true)} className="">
-                      e
+            <div className=" flex flex-col items-center">
+              {/* main section */}
+              <FormField
+                name="shopName"
+                control={form.control}
+                render={({ field }) => (
+                  <div className="relative flex mt-2 items-center justify-center">
+                    <div className="flex items-center gap-5">
+                      <Input
+                        id="name"
+                        {...field}
+                        className="ml-4 w-[180px] text-center text-base h-12"
+                        onFocus={() => setEditOpen(true)}
+                        placeholder="Shop Name"
+                        // onBlur={() => setEditOpen(false)}
+                      />
+
+                      <label htmlFor="name" className=" block w-5 ">
+                        <IconEdit />
+                      </label>
                     </div>
                   </div>
-                </div>
-              )}
-            />
+                )}
+              />
 
-            {/* para section */}
-            <FormField
-              name="shopAddress"
-              control={form.control}
-              render={({ field }) => (
-                <div className="relative flex mt-2 items-center justify-center">
-                  <div className="flex items-center gap-5">
-                    <Textarea
-                      {...field}
-                      className="p-1 w-[220px] ml-3 text-sm"
-                      onFocus={() => setEditOpen(true)}
-                      onBlur={() => setEditOpen(false)}
-                    />
-                    <div className="">e</div>
+              {/* para section */}
+              <FormField
+                name="shopAddress"
+                control={form.control}
+                render={({ field }) => (
+                  <div className="relative flex mt-2 items-center justify-center">
+                    <div className="flex items-center gap-5">
+                      <Textarea
+                        id="address"
+                        {...field}
+                        className="p-2 text-center w-[220px] ml-3 text-sm"
+                        onFocus={() => setEditOpen(true)}
+                        placeholder="Your Shop Address"
+                        // onBlur={() => setEditOpen(false)}
+                      />
+                      <label htmlFor="address" className="">
+                        <IconEdit />
+                      </label>
+                    </div>
                   </div>
-                </div>
-              )}
-            />
+                )}
+              />
 
-            {/* phone section */}
-            <FormField
-              name="phoneNumber"
-              control={form.control}
-              render={({ field }) => (
-                <div className="relative flex mt-2 items-center justify-center">
-                  <div className="flex items-center gap-5">
-                    <Input
-                      {...field}
-                      className="ml-3 w-[250px] text-base h-8"
-                      onFocus={() => setEditOpen(true)}
-                      onBlur={() => setEditOpen(false)}
-                    />
-                    <div className="">e</div>
+              {/* phone section */}
+              <FormField
+                name="phoneNumber"
+                control={form.control}
+                render={({ field }) => (
+                  <div className="relative flex mt-2 items-center justify-center">
+                    <div className="flex items-center gap-5">
+                      <Input
+                        id="number"
+                        {...field}
+                        className="ml-3 w-[250px] text-center text-base h-8"
+                        onFocus={() => setEditOpen(true)}
+                        // onBlur={() => setEditOpen(false)}
+                        placeholder="Phone Number"
+                      />
+                      <label htmlFor="number" className="">
+                        <IconEdit />
+                      </label>
+                    </div>
                   </div>
-                </div>
-              )}
-            />
+                )}
+              />
+            </div>
 
             {/* voucher Id */}
             <div className="flex gap-2 justify-center mt-2 items-center text-[12px]">
@@ -303,23 +387,56 @@ const Index = () => {
               </div>
             </div>
 
-            <div className=" flex items-center justify-center py-3">
-              <div className=" w-[100px] h-[100px] bg-black rounded-2xl"></div>
+            <div className=" flex  gap-3 items-center justify-center py-3">
+              <div className=" border p-2 rounded-2xl">
+                <img
+                  src="https://cdn.pixabay.com/photo/2013/07/12/14/45/qr-code-148732_1280.png"
+                  className={`w-[80px] h-[80px]  ${qr ? "" : " opacity-50"}`}
+                  alt=""
+                />
+              </div>
+              {qr ? (
+                <Button
+                  onClick={() => {
+                    setQr(false);
+                    setEditOpen(true);
+                  }}
+                  type="button"
+                  variant={"link"}
+                  className=" p-0 m-0"
+                >
+                  <IconOpen />
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => {
+                    setQr(true);
+                    setEditOpen(true);
+                  }}
+                  type="button"
+                  variant={"link"}
+                  className=" p-0 m-0"
+                >
+                  <IconClose />
+                </Button>
+              )}
             </div>
 
             <FormField
               name="message"
               control={form.control}
               render={({ field }) => (
-                <div className="relative  flex mt-4 items-center justify-center">
-                  <div className="flex items-center gap-5">
+                <div className="relative flex mt-4 items-center justify-center">
+                  <div className="flex items-center gap-2">
                     <Textarea
+                      id="message"
                       {...field}
-                      className="ml-3 w-[250px] text-base h-8"
-                      onFocus={() => setEditOpen(true)}
-                      onBlur={() => setEditOpen(false)}
+                      className="ml-3 w-[280px] placeholder:text-[12px] text-center text-base h-8"
+                      placeholder="ဝယ်ယူအားပေးမှုအတွက် ကျေးဇူးတင်ပါသည်"
                     />
-                    <div className="">e</div>
+                    <label htmlFor="message" className="">
+                      <IconEdit />
+                    </label>
                   </div>
                 </div>
               )}
@@ -333,13 +450,52 @@ const Index = () => {
             }}
             className="w-full  fixed left-0 "
           >
-            <div className="flex bg-gray-100 px-4 py-4 mt-2 gap-3">
-              <Button className="w-full">မသိမ်းပါ</Button>
-              <Button className="w-full">သိမ်းမည်</Button>
+            <div className="flex z-10 bg-gray-100 px-4 py-4 mt-2 gap-3">
+              <Button
+                form="form"
+                type="button"
+                onClick={() => setEditOpen(false)}
+                className="w-full bg-[#C8C8C8] text-black "
+              >
+                မသိမ်းပါ
+              </Button>
+              <Button
+                disabled={editVoucher.isPending}
+                form="form"
+                type="submit"
+                className="w-full bg-blue-500 "
+              >
+                သိမ်းမည်
+              </Button>
             </div>
           </div>
         )}
       </Form>
+      <CustomDrawer open={open} setOpen={setOpen}>
+        <div className=" flex flex-col gap-4  border-t-2 px-4 pt-5 pb-3">
+          <label
+            onClick={() => setOpen(false)}
+            htmlFor="file"
+            className="  flex items-center gap-2 "
+          >
+            <IconEdit /> <p>ပုံ ပြောင်းလဲမည်</p>
+          </label>
+          <div
+            onClick={() => {
+              setOpen(false);
+              setSelectedImage(null);
+              if (fileRef.current) {
+                fileRef.current.value = "";
+              }
+            }}
+            className=" px-0 flex items-center gap-2"
+          >
+            <IconDelete />
+            <p>ပုံ ဖျက်မည်</p>
+          </div>
+        </div>
+        <div className=" w-full border-b-2 pb-3"></div>
+      </CustomDrawer>
     </div>
   );
 };
