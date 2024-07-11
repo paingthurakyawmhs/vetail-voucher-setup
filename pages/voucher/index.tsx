@@ -17,6 +17,7 @@ import IconClose from "@/assets/IconClose";
 import CustomDrawer from "@/components/custom-drawer";
 import IconDelete from "@/assets/IconDelete";
 import Link from "next/link";
+import IconCamera from "@/assets/IconCamera";
 
 const formschema = z.object({
   shopName: z.string().optional(),
@@ -240,7 +241,9 @@ const Index = () => {
                     className="w-[80px] h-[80px] bg-gray-100 rounded-xl flex items-center justify-center mt-4"
                     htmlFor="file"
                   >
-                    <>ca</>
+                    <>
+                      <IconCamera />
+                    </>
                   </label>
                 )}
               </div>
